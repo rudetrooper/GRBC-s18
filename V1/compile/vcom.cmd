@@ -1,0 +1,1 @@
+-w -erf e:/Encryption/V1/compile/V1.erf -d e:/Encryption/V1/compile -s e:/Encryption/library.cfg -j e:/Encryption/V1/projlib.cfg -work V1 -dbg -e 100 -work V1 -2002 e:/Encryption/V1/src/Behavioral.vhd 

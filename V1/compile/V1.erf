@@ -1,0 +1,7 @@
+MESSAGE "File: e:\Encryption\V1\src\Behavioral.vhd" 
+MESSAGE "Compile Entity "Encryption"" 
+ERROR COMP96_0016: "Design unit declaration expected." "e:\Encryption\V1\src\Behavioral.vhd" 18 1
+MESSAGE "Compile Architecture "Behavioral" of Entity "Encryption"" 
+ERROR COMP96_0019: "Keyword 'begin' expected." "e:\Encryption\V1\src\Behavioral.vhd" 75 2
+ERROR COMP96_0016: "Design unit declaration expected." "e:\Encryption\V1\src\Behavioral.vhd" 75 10
+FAILURE "Compile failure 3 Errors 0 Warnings  Analysis time :  0.0 [ms]" 
