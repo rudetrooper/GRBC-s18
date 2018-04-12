@@ -6,19 +6,37 @@ use ieee.numeric_std.all;
 entity Encryption is
 	port
 	(clk	: in std_logic;
+	start	: in std_logic;
+	input_key:	in std_logic_vector; -- 32 bit input bus
+	input_txt:	in std_logic_vector; -- 32bit input bus
 --	Rcon	: constant std_logic_vector(); -- is this needed 
 --	Sbox	: constant std_logic_vector();
-	Round	: inout integer;
-	Key		: std_logic_vector(0 to 127)
+	Key_Round	: inout integer; 
+	txt_round	: inout integer;
+	Key		: std_logic_vector(0 to 127)  -- will change to conform to the number of pins allowed
 	);
 end encryption;
 
 
--- attempt of the Two Dimensional Array
-type Blck is array (0 to 15) of std_logic_vector(7 downto 0);
-	signal B : blck;	-- declare 16 byte 2d array  
+	
+  
+Architecture Behavioral of Encryption is 
 
-type array_256 is array (0 to 255);
+shared variable Row1_Key	: std_logic_vector(0 to 31);
+shared variable Row2_Key	: std_logic_vector(0 to 31);
+shared variable Row3_Key	: std_logic_vector(0 to 31);
+shared variable Row4_Key	: std_logic_vector(0 to 31);
+shared variable key_expansion : std_logic = '0';
+
+shared variable Row1_txt	: std_logic_vector(0 to 31);
+shared variable Row2_txt	: std_logic_vector(0 to 31);
+shared variable Row3_txt	: std_logic_vector(0 to 31);
+shared variable Row4_txt	: std_logic_vector(0 to 31);
+shared variable plaintxt	: std_logic_vector(0 to 127);
+
+type array_256 is array (0 to 255) of std_logic_vector(7 downto 0);		-- used for sbox and rcon
+type array_16 is array (0 to 15) of std_logic_vector(7 downto 0);		-- used for the mixed columns
+
 
 	Constant rcon : array_256 := (
     X"B1",X"01",X"02",X"04",X"08",X"10",X"20",X"40",X"80",X"63",X"C6",X"EF",X"BD",X"19",X"32",X"64",
@@ -38,7 +56,9 @@ type array_256 is array (0 to 255);
     X"FB",X"95",X"49",X"92",X"47",X"8E",X"7F",X"FE",X"9F",X"5D",X"BA",X"17",X"2E",X"5C",X"B8",X"13",
     X"26",X"4C",X"98",X"53",X"A6",X"2F",X"5E",X"BC",X"1B",X"36",X"6C",X"D8",X"D3",X"C5",X"E9",X"B1");
 	
-  constant sbox : array_256 := (
+	
+	
+	constant sbox : array_256 := (
     X"63",X"7C",X"E1",X"60",X"2F",X"62",X"E2",X"68",X"48",X"6C",X"E3",X"34",X"AE",X"29",X"E6",X"95",
     X"FB",X"CE",X"E9",X"8F",X"2E",X"0D",X"C5",X"53",X"85",X"4D",X"46",X"66",X"A1",X"A7",X"15",X"EB",
     X"22",X"1B",X"B8",X"16",X"2B",X"A5",X"18",X"D6",X"C8",X"9D",X"54",X"79",X"3D",X"9F",X"76",X"65",
@@ -57,68 +77,115 @@ type array_256 is array (0 to 255);
     X"26",X"39",X"C9",X"C2",X"E0",X"8E",X"B2",X"5E",X"3C",X"B5",X"91",X"45",X"1C",X"F2",X"D8",X"2D"
   ); 
  
-  constant MC : array_16 := (
+  	constant MC : array_16 := (
   	X"3",X"4",X"1",X"7",
-  	X"7",X"3",X"4",X"1",
+ 	X"7",X"3",X"4",X"1",
   	X"1",X"7",X"3",X"4",
-  	X"4",X"1",X"7",X"3",);
-
-Architecture Behavioral of Encryption is
-
--- Key expansion
+  	X"4",X"1",X"7",X"3");		 
+	  
+	
+-- Key expansion  sudo/ how to
 	-- Rotate row4
 	-- Rcon XOR key with the RCON constant LUT
 	-- SBOX substitution
-	-- finite field XOR ???????
+	-- finite field XOR ?????
  
+	begin	-- begins the architecture 
+
+Process (clk, start, key_process) -- input process
+
+	variable feedkey	: std_logic_vector(0 to 31);	-- feed in the key by 32 bit bus
+	variable feedtxt	: std_logic_vector(0 to 31);	-- feed in the txt by 32 bit bus
+begin
 	
-	process (clk, init_Expansion, round)
+	if (clk'event and start = '1')	   -- issue with this is that how will we update the inputs in the loop????
+		for i in 1 to 4 loop
+			case i is
+				when 1 =>	Row1_key := input_key;
+							Row1_txt := input_txt; 
+				
+				when 2 =>	Row2_key := input_key;
+							Row2_txt := input_txt;
+				
+				when 3 => 	Row3_key := input_key;
+							Row3_txt := input_txt;
+							
+				when 4 =>	Row4_key := input_key;
+							Row4_txt := input_txt;
+				
+			end case;
+		end loop;
+	end if;
+end process;	-- for the inputs
+	
+	
+				
+process (clk, init_Expansion, round)
 	
 	variable init_Expansion : std_logic;	-- initialize the encryption
-	variable Row1_Key	: std_logic_vector(0 to 31);
-	variable Row2_Key	: std_logic_vector(0 to 31);
-	variable Row3_Key	: std_logic_vector(0 to 31);
-	variable Row4_Key	: std_logic_vector(0 to 31);	 
+--	variable Row1_Key	: std_logic_vector(0 to 31);
+--	variable Row2_Key	: std_logic_vector(0 to 31);		 -- changed these to shared variables
+--	variable Row3_Key	: std_logic_vector(0 to 31);
+--	variable Row4_Key	: std_logic_vector(0 to 31);	 
 	Variable Temp_Sbox_Key	: std_logic_vector(0 to 127);
 
 
-	begin;	-- begin the process for key expansion
+	begin	-- begin the process for key expansion
 	
 	-- creating rows from the original key	
-		if (init_Expansion = '1' and round < 12) then
-			for i in 0 to 31 loop	-- not sure if it needs to be 3 for hex usage
-				Row1_Key(i) := CipherKey(i);
-		 		Row2_Key(i) := CipherKey(32+i);
-				Row3_Key(i) := CipherKey(64+i);
-				Row4_Key(i) := CipherKey(96+i);
-			end loop;		  
-			 
-			 
--- Rotate Rows
--- only rotate the last row
+		if (init_Expansion = '1' and key_round <= 12) then	   -- if condition to verify that we are still in each round
 
-		--	Row1_Key 	:= rol 0  Row1_Key;
-		--	Row2_Key	:= rol 8  Row2_Key;
-		--	Row3_Key	:= rol 16 Row3_Key;
-			Row4_Key	:= rol 8 Row4_Key;
 			
+			
+-- Rotate Row 4 and creating the bytes.		
+									-- bytes			(0-7) (8-15) (16-23) (24-31)
+									-- rotate to left	(8-15) (16-23) (24-31) (0-7)
+	
+		  Row4_Key_byte1	:= Row4_Key(15 downto 8);
+		  Row4_Key_byte2	:= Row4_Key(23 downto 16);
+		  Row4_Key_byte3	:= Row4_Key(31 downto 24);
+		  Row4_Key_byte4	:= Row4_Key(7 downto 8);  
+
+		  
+		  Row4_Key := Row4_Key_byte2 & Row4_Key_byte3 & Row4_Key_byte4;	  -- combine to create a single array
+		
+
+		
 -- Rcon XOR
 			
 			for i in 0 to 31 loop
-				Key(i) := Row4_key(i) xor Rcon(round) 	-- or is it rcon(round +1)??
+				Key(i) := Row4_key(i) xor Rcon(Key_round) 	-- or is it rcon(round +1)??
 			end loop; 
+			
+		-- convert to a bytwise word
+			tempbyte1	:= Row4_Key(15 downto 8);
+			tempbyte2	:= Row4_Key(23 downto 16);
+		  	tempbyte3	:= Row4_Key(31 downto 24);
+		  	tempbyte4	:= Row4_Key(7 downto 8);	
 			
 -- Sbox
 
-			for i in 0 to 31 loop
-				temp_key 		:= key(i);
-				Temp_Sbox_key(i) := sbox(temp);
-			end loop;
+			Row_key_byte1	:= sbox(tempbyte1);
+			Row_key_byte2	:= sbox(tempbyte2);
+			Row_key_byte3	:= sbox(tempbyte3);
+			Row_key_byte4	:= sbox(tempbyte4);	
 			
+			-- combine to create a single array
+			Row4_Key := Row4_Key_byte2 & Row4_Key_byte3 & Row4_Key_byte4;	  
+			
+--		for i in 0 to 31 loop	-- redefine the row values
+--				Row1_Key(i) := Temp_Sbox_key(i);
+--			 	Row2_Key(i) := Temp_Sbox_key(32+i);
+--				Row3_Key(i) := Temp_Sbox_key(64+i);
+--				Row4_Key(i) := Temp_Sbox_key(96+i);
+--			end loop;				
+
+			CipherKey 	:= Row1_key & Row2_key & Row3_key & Row4_key; 
+
 -- key schedule Core		  
 
-		for i in 0 to 7 loop
-			Key_Schedule(i) := rcon(round) xor CipherKey(i);
+		for i in 0 to 127 loop
+			Key_Schedule(i) := rcon(key_round) xor CipherKey(i);
 		end loop;
 	
 
@@ -130,20 +197,19 @@ Architecture Behavioral of Encryption is
 --			end loop;
 			
 			
-	
 			CipherKey := Key_Schedule;
 			
-		round := round + 1;	-- add to round key
-		end if;
+		Key_round := Key_round + 1;	-- add to round key
+		
+		elsif round_key = 12 then
+			key_expansion = '1';
+			
+		end if;	-- if round_key < 12
+		
 	end process; -- key expansion process
 	
--- reset the cipherkey for next round
-			
-
-
 	
-	
-	
+---------------------------------------------------------------------------------------------------------	
 	
 -- process for the Encryption
 -- debating on one process or two?
@@ -165,36 +231,43 @@ variable Row2_Key_cipher	: std_logic_vector(0 to 31);
 variable Row3_Key_cipher	: std_logic_vector(0 to 31);
 variable Row4_Key_cipher	: std_logic_vector(0 to 31);	 
 Variable Temp_Sbox_cipher	: std_logic_vector(0 to 127);	
+byte : array_16;
 
-
+begin
+	
+	
 	if round = 0 then
+		plaintxt 	:= Row1_txt & Row2_txt & Row3_txt & Row4_txt;
+		
 		for i in 0 to 127 loop
 			Encrypted_txt(i) := CipherKey(i) xor Plaintxt(i);
 		end loop; 
 		
 	elsif round < 12 then
 		
+		-- organize into column major
 --			Row1_txt(0 to 31) := plaintxt(0 to 7)   & plaintxt(32 to 39) & plaintxt(64 to 71) & plaintxt(96 to 103);
 --		 	Row2_txt(0 to 31) := plaintxt(8 to 15)  & plaintxt(40 to 47) & plaintxt(72 to 79) & plaintxt(104 to 111);
 --			Row3_txt(0 to 31) := plaintxt(16 to 23) & plaintxt(48 to 55) & plaintxt(80 to 87) & plaintxt(112 to 119);
 --			Row4_txt(0 to 31) := plaintxt(24 to 31) & plaintxt(56 to 63) & plaintxt(88 to 95) & plaintxt(120 to 127);
-				
-			B(0) := plaintxt(0 to 7)		-- attempt at a 2d array
-			B(1) := plaintxt(8 to 15)
-			B(2) := plaintxt(16 to 23)
-			B(3) := plaintxt(24 to 31)
-			B(4) := plaintxt(32 to 39)
-			B(5) := plaintxt(40 to 47)
-			B(6) := plaintxt(48 to 55)
-			B(7) := plaintxt(56 to 63)
-			B(8) := plaintxt(64 to 71)
-			B(9) := plaintxt(72 to 79)
-			B(10) := plaintxt(80 to 87)
-			B(11) := plaintxt(88 to 95)
-			B(12) := plaintxt(96 to 103)
-			B(13) := plaintxt(104 to 111)
-			B(14) := plaintxt(112 to 119)
-			B(15) := plaintxt(120 to 127)
+
+			
+			Byte(0) := plaintxt(0 to 7)		-- attempt at a 2d array
+			Byte(1) := plaintxt(8 to 15)
+			Byte(2) := plaintxt(16 to 23)
+			Byte(3) := plaintxt(24 to 31)
+			Byte(4) := plaintxt(32 to 39)
+			Byte(5) := plaintxt(40 to 47)
+			Byte(6) := plaintxt(48 to 55)
+			Byte(7) := plaintxt(56 to 63)
+			Byte(8) := plaintxt(64 to 71)
+			Byte(9) := plaintxt(72 to 79)
+			Byte(10) := plaintxt(80 to 87)
+			Byte(11) := plaintxt(88 to 95)
+			Byte(12) := plaintxt(96 to 103)
+			Byte(13) := plaintxt(104 to 111)
+			Byte(14) := plaintxt(112 to 119)
+			Byte(15) := plaintxt(120 to 127)
 			
 			
 -- do the sbox substitution		  -- how to do this with hexadecimal
